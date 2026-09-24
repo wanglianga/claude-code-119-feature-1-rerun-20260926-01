@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-cinema}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cinema}
+      POSTGRES_DB: ${DB_NAME:-opencinema}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # 数据库端口不发布到宿主，仅 compose 内网可达
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cinema} -d ${DB_NAME:-opencinema}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME}-app
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-cinema}
+      DB_PASSWORD: ${DB_PASSWORD:-cinema}
+      DB_NAME: ${DB_NAME:-opencinema}
+      JWT_SECRET: ${JWT_SECRET:-open-cinema-dev-secret}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # 仅发布应用服务端口；宿主端口由 CC_PUBLISH_PORT 指定，避免并行任务冲突
+      - "${CC_PUBLISH_PORT}:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
