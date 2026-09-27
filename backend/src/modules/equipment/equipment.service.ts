@@ -168,6 +168,9 @@ export class EquipmentService {
                    dto: { result: 'returned_ok' | 'returned_damaged' | 'lost'; note?: string; compensationCents?: number }) {
     const screening = await this.screeningRepo.findOne({ where: { id: screeningId } });
     if (!screening) throw new NotFoundException('场次不存在');
+    if (screening.status === 'postponed') {
+      throw new BadRequestException('该场次已雨天改期，到场设备由改期后新场次承接，归还/核销请到改期后场次办理');
+    }
     const a = await this.assignRepo.findOne({ where: { screeningId, equipmentId }, relations: ['equipment'] });
     if (!a) throw new NotFoundException('该设备未在本场次领用记录中');
     if (a.state.startsWith('returned') || a.state === 'lost') {

@@ -11,6 +11,18 @@
       </span>
     </div>
 
+    <div v-if="s.status === 'postponed'" class="notice" style="background:#eef4ff;border-color:#5b8def">
+      🌧️ 本场次因现场搭建完成后遇强降雨已<b>改期停办</b>，原场次不进入正常核销；
+      归还/赔付/版权/补贴均到改期后新场次办理。
+      <router-link v-if="s.rescheduledToScreeningId" :to="'/screenings/' + s.rescheduledToScreeningId" style="margin-left:8px;font-weight:700">
+        前往改期后新场次 →
+      </router-link>
+    </div>
+    <div v-else-if="s.rescheduledFromId" class="notice" style="background:#eef4ff;border-color:#5b8def">
+      🌧️ 本场次为<b>雨天改期后新场次</b>，由
+      <router-link :to="'/screenings/' + s.rescheduledFromId">原场次</router-link> 承接而来，沿用其申请要素与可用资源。
+    </div>
+
     <div v-if="s.venue?.blacklisted" class="notice danger">
       ⛔ 该场地已列入黑名单：{{ s.venue.blacklistReason }}
     </div>
@@ -252,9 +264,166 @@
       </div>
     </div>
 
+    <!-- 雨天改期 -->
+    <div v-show="tab === 'rain'">
+      <div class="card">
+        <h3>强降雨雨天改期（现场搭建完成后遇雨）</h3>
+        <div class="notice">
+          现场搭建完成后遇强降雨，现场负责人需上传
+          <b>气象截图、已到场设备、观众通知、商户协调结果</b> 四类材料；
+          平台逐项判定 <b>版权授权日期、设备占用、安保排班、补贴资格</b> 能否沿用；
+          改期后原场次停办、<b>不进入正常核销</b>。商户已缴协办费的，由财务区分
+          <b>可退费用、已发生搭建成本、观众补偿通知</b>；改期结果计入主办方后续申请评分。
+        </div>
+
+        <!-- 提交改期申请 -->
+        <template v-if="canSubmitRain">
+          <div class="grid2">
+            <div class="form-row"><label class="req">气象截图</label>
+              <input v-model="rainForm.weatherShot" placeholder="气象预警/雷达回波截图文件名或URL" />
+            </div>
+            <div class="form-row"><label class="req">已到场设备</label>
+              <input v-model="rainForm.equipmentArrived" placeholder="如：KIT-01 六件已到场搭建，加盖防雨罩" />
+            </div>
+            <div class="form-row"><label class="req">观众通知</label>
+              <input v-model="rainForm.audienceNotice" placeholder="如：公众号+现场广播+短信已通知改期" />
+            </div>
+            <div class="form-row"><label class="req">商户协调结果</label>
+              <input v-model="rainForm.merchantCoord" placeholder="如：周边餐饮商户同意顺延，2家需补偿" />
+            </div>
+            <div class="form-row"><label class="req">期望改期日期</label>
+              <input v-model="rainForm.newShowDate" type="date" />
+            </div>
+            <div class="form-row"><label>改期时间</label>
+              <input v-model="rainForm.newShowTime" type="time" />
+            </div>
+          </div>
+          <div class="form-row" style="grid-template-columns:110px 1fr">
+            <label>降雨实况</label>
+            <textarea v-model="rainForm.rainDetail" placeholder="雨量、开始时间、现场处置（疏散/遮护/断电等）" />
+          </div>
+          <div class="grid2">
+            <div class="form-row"><label>商户已缴协办费</label>
+              <label class="muted"><input type="checkbox" style="width:auto" v-model="rainForm.coOrganizerFeePaid" /> 商户已缴协办费（需财务拆分退费/搭建成本/观众补偿）</label>
+            </div>
+            <div class="form-row" v-if="rainForm.coOrganizerFeePaid"><label>已缴协办费(元)</label>
+              <input v-model.number="rainForm.coOrganizerFeeTotalYuan" type="number" min="0" />
+            </div>
+          </div>
+          <div class="row" style="padding-left:120px">
+            <button class="primary" @click="submitRain">🌧️ 提交雨天改期申请</button>
+          </div>
+        </template>
+        <div v-else-if="s.status === 'postponed'" class="notice" style="background:#eef4ff;border-color:#5b8def">
+          原场次已改期停办，见下方处理单与改期后新场次。
+        </div>
+        <div v-else class="muted">仅在「现场搭建确认」或「放映中」状态、且搭建完成后遇强降雨时可申请改期。</div>
+      </div>
+
+      <!-- 改期处理单 -->
+      <div v-for="r in s.rainReschedules" :key="r.id" class="card">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <span class="tag" :class="rainStatusClass(r.status)">{{ RAIN_STATUS[r.status] || r.status }}</span>
+            <b style="margin-left:8px">改期至 {{ r.newShowDate }} {{ r.newShowTime }}</b>
+            <span v-if="r.newScreeningId" class="pill">
+              <router-link :to="'/screenings/' + r.newScreeningId">改期后新场次 →</router-link>
+            </span>
+          </div>
+          <span class="muted">发起人 {{ r.createdBy?.name }} · {{ fmt(r.createdAt) }}</span>
+        </div>
+
+        <!-- 四类材料 -->
+        <div class="grid2" style="margin-top:10px">
+          <Info label="气象截图" :value="r.weatherShot" />
+          <Info label="已到场设备" :value="r.equipmentArrived" />
+          <Info label="观众通知" :value="r.audienceNotice" />
+          <Info label="商户协调结果" :value="r.merchantCoord" />
+        </div>
+        <div v-if="r.rainDetail" style="margin-top:6px"><span class="muted">降雨实况：</span>{{ r.rainDetail }}</div>
+
+        <!-- 四项沿用判定结果 -->
+        <h3 style="margin-top:14px">平台四项沿用判定</h3>
+        <div class="notice" v-if="rainDraft[r.id]?.hint">{{ rainDraft[r.id].hint }}</div>
+        <table class="list">
+          <thead><tr><th>判定项</th><th>结论</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>版权授权日期</td><td><span class="tag" :class="verdictClass(r.copyrightReusable)">{{ verdictText(r.copyrightReusable) }}</span></td><td class="muted">{{ r.copyrightJudgeNote || '—' }}</td></tr>
+            <tr><td>设备占用</td><td><span class="tag" :class="verdictClass(r.equipmentReusable)">{{ verdictText(r.equipmentReusable) }}</span></td><td class="muted">{{ r.equipmentJudgeNote || '—' }}</td></tr>
+            <tr><td>安保排班</td><td><span class="tag" :class="verdictClass(r.securityReusable)">{{ verdictText(r.securityReusable) }}</span></td><td class="muted">{{ r.securityJudgeNote || '—' }}</td></tr>
+            <tr><td>补贴资格</td><td><span class="tag" :class="verdictClass(r.subsidyReusable)">{{ verdictText(r.subsidyReusable) }}</span></td><td class="muted">{{ r.subsidyJudgeNote || '—' }}</td></tr>
+          </tbody>
+        </table>
+
+        <!-- 判定表单 -->
+        <template v-if="['submitted','decided'].includes(r.status) && isAny('reviewer','warehouse','security','finance','street')">
+          <div class="grid4" style="margin-top:10px">
+            <label v-for="f in judgeFields" :key="f.key" class="muted" style="display:block">
+              <input type="checkbox" style="width:auto" v-model="rainDraft[r.id][f.key]" /> {{ f.label }}可沿用
+            </label>
+          </div>
+          <div class="grid2">
+            <div class="form-row" v-for="f in judgeFields" :key="'n'+f.key">
+              <label>{{ f.label }}说明</label>
+              <input v-model="rainDraft[r.id][f.key+'Note']" :placeholder="f.ph" />
+            </div>
+          </div>
+          <div class="row">
+            <button class="primary" @click="judgeRain(r)">保存沿用判定（四项齐备即判定完成）</button>
+          </div>
+        </template>
+
+        <!-- 协办费拆分 -->
+        <template v-if="r.coOrganizerFeePaid">
+          <h3 style="margin-top:14px">商户协办费拆分 / 观众补偿（财务）</h3>
+          <div class="grid4">
+            <div class="kpi"><div class="num">¥{{ fen(r.coOrganizerFeeTotal) }}</div><div class="label">已缴协办费</div></div>
+            <div class="kpi"><div class="num" style="color:#2e7d32">¥{{ fen(r.coOrganizerFeeRefund) }}</div><div class="label">可退费用</div></div>
+            <div class="kpi"><div class="num" style="color:#e6a23c">¥{{ fen(r.rainBuildCost) }}</div><div class="label">已发生搭建成本(不退)</div></div>
+            <div class="kpi"><div class="num" style="color:#d9534f">¥{{ fen(r.audienceCompCents) }}</div><div class="label">观众补偿</div></div>
+          </div>
+          <div v-if="r.audienceCompNotice" class="muted" style="margin:6px 0">观众补偿通知：{{ r.audienceCompNotice }}</div>
+          <template v-if="r.status !== 'rescheduled' && isAny('finance','street')">
+            <div class="grid4" style="margin-top:8px">
+              <input v-model.number="rainDraft[r.id].refundYuan" type="number" placeholder="可退(元)" />
+              <input v-model.number="rainDraft[r.id].buildYuan" type="number" placeholder="搭建成本(元)" />
+              <input v-model.number="rainDraft[r.id].compYuan" type="number" placeholder="观众补偿(元)" />
+              <input v-model="rainDraft[r.id].compNotice" placeholder="观众补偿通知方式/内容" />
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button @click="feeRain(r)">保存协办费拆分/补偿通知</button>
+            </div>
+          </template>
+        </template>
+
+        <!-- 执行/驳回 -->
+        <template v-if="r.status === 'decided' && isAny('reviewer','finance','street')">
+          <div class="row" style="margin-top:14px">
+            <label class="muted">主办方后续申请评分调整
+              <input v-model.number="rainDraft[r.id].creditDelta" type="number" style="width:80px" /> 分（负值扣分，默认 -2）
+            </label>
+            <input v-model="rainDraft[r.id].creditNote" placeholder="评分影响说明（可留空自动生成）" style="flex:1;min-width:200px" />
+            <button class="success" @click="confirmRain(r)">✓ 执行改期（原场次停办不核销·生成改期场）</button>
+            <button class="danger" @click="rejectRain(r)">不予改期</button>
+          </div>
+        </template>
+
+        <div v-if="r.creditImpactNote" class="notice" style="margin-top:12px">
+          主办方评分影响：{{ r.creditImpactNote }}
+        </div>
+        <div v-if="r.finalRemark" class="muted" style="margin-top:6px">备注：{{ r.finalRemark }}</div>
+      </div>
+    </div>
+
     <!-- 核销 -->
     <div v-show="tab === 'settlement'">
-      <div class="card">
+      <div v-if="s.status === 'postponed'" class="notice" style="background:#eef4ff;border-color:#5b8def">
+        🌧️ 本场次已雨天改期，<b>原场次不进入正常核销</b>（版权核销/财务流水/关单均已停用）。
+        协办费可退/搭建成本/观众补偿见「雨天改期」页签；设备归还、赔付、补贴请到
+        <router-link v-if="s.rescheduledToScreeningId" :to="'/screenings/' + s.rescheduledToScreeningId">改期后新场次</router-link>
+        <span v-else>改期后新场次</span>办理。
+      </div>
+      <div class="card" v-if="s.status !== 'postponed'">
         <h3>活动结束 · 归还/赔付/投诉/版权/补贴（均回到本场次记录）</h3>
         <div class="grid4">
           <div class="kpi"><div class="num">¥{{ fen(s.damageCompensation) }}</div><div class="label">设备损坏赔付</div></div>
@@ -267,7 +436,7 @@
         </div>
       </div>
 
-      <div class="card" v-if="isAny('finance','street')">
+      <div class="card" v-if="isAny('finance','street') && s.status !== 'postponed'">
         <h3>财务登记</h3>
         <div class="row">
           <select v-model="settle.type" style="width:170px">
@@ -335,6 +504,7 @@ const tabs = computed(() => [
   { key: 'equipment', label: `设备出库/归还${s.value?.equipmentAssignments?.length ? `（${s.value.equipmentAssignments.length}）` : ''}` },
   { key: 'site', label: '现场巡检/志愿者' },
   { key: 'incidents', label: `异常协同${s.value?.incidents?.length ? `（${s.value.incidents.filter((i:any)=>i.status!=='resolved').length}）` : ''}` },
+  { key: 'rain', label: `雨天改期${s.value?.rainReschedules?.length ? `（${s.value.rainReschedules.length}）` : ''}` },
   { key: 'settlement', label: '归还核销/补贴' },
   { key: 'timeline', label: '街道时间线' },
 ]);
@@ -349,6 +519,33 @@ const newInc = reactive({ type: 'noise_complaint', description: '', noiseDb: 65 
 const settle = reactive({ type: 'deposit_refund', yuan: 2000, note: '' });
 const finalRemark = ref('');
 const returnDraft = reactive<Record<string, any>>({});
+
+const RAIN_STATUS: Record<string, string> = {
+  submitted: '待平台判定', decided: '四项判定完成', rescheduled: '已改期', rejected: '不予改期',
+};
+const rainForm = reactive({
+  weatherShot: '', equipmentArrived: '', audienceNotice: '', merchantCoord: '',
+  rainDetail: '', newShowDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+  newShowTime: '19:30', coOrganizerFeePaid: false, coOrganizerFeeTotalYuan: 0,
+});
+const rainDraft = reactive<Record<string, any>>({});
+const judgeFields = [
+  { key: 'copyrightReusable', label: '版权授权日期', ph: '授权有效期是否覆盖新档期' },
+  { key: 'equipmentReusable', label: '设备占用', ph: '到场成套新档期是否被占用' },
+  { key: 'securityReusable', label: '安保排班', ph: '原班安保能否顺延新档期' },
+  { key: 'subsidyReusable', label: '补贴资格', ph: '改期后街道补贴是否保留' },
+];
+
+const canSubmitRain = computed(() =>
+  ['site_confirmed', 'screening'].includes(s.value?.status)
+  && isAny('site_manager', 'applicant', 'street')
+  && !(s.value?.rainReschedules || []).some((r: any) => ['submitted', 'decided'].includes(r.status)));
+
+function verdictText(v: boolean | null) { return v === true ? '可沿用' : v === false ? '不可沿用' : '待判定'; }
+function verdictClass(v: boolean | null) { return v === true ? 'green' : v === false ? 'red' : 'orange'; }
+function rainStatusClass(st: string) {
+  return st === 'rescheduled' ? 'green' : st === 'rejected' ? 'red' : st === 'decided' ? 'blue' : 'orange';
+}
 
 const fen = fenToYuan;
 function fmt(d?: string) { return d ? new Date(d).toLocaleString('zh-CN', { hour12: false }) : '—'; }
@@ -377,6 +574,28 @@ async function load() {
   for (const a of data.equipmentAssignments || []) {
     if (!returnDraft[a.equipmentId]) {
       returnDraft[a.equipmentId] = { result: 'returned_ok', compensationYuan: 0, note: '' };
+    }
+  }
+  for (const r of data.rainReschedules || []) {
+    if (!rainDraft[r.id]) {
+      const { data: rd } = await api.get(`/rain-reschedules/${r.id}`);
+      rainDraft[r.id] = {
+        copyrightReusable: r.copyrightReusable ?? false,
+        equipmentReusable: r.equipmentReusable ?? false,
+        securityReusable: r.securityReusable ?? false,
+        subsidyReusable: r.subsidyReusable ?? false,
+        copyrightReusableNote: r.copyrightJudgeNote || '',
+        equipmentReusableNote: r.equipmentJudgeNote || '',
+        securityReusableNote: r.securityJudgeNote || '',
+        subsidyReusableNote: r.subsidyJudgeNote || '',
+        refundYuan: Number(fenToYuan(r.coOrganizerFeeRefund)),
+        buildYuan: Number(fenToYuan(r.rainBuildCost)),
+        compYuan: Number(fenToYuan(r.audienceCompCents)),
+        compNotice: r.audienceCompNotice || '',
+        creditDelta: r.organizerCreditDelta || -2,
+        creditNote: r.creditImpactNote || '',
+        hint: rd.equipmentOccupancyHint || '',
+      };
     }
   }
 }
@@ -466,6 +685,61 @@ async function addSettlement() {
 }
 async function complete() {
   await api.post(`/screenings/${s.value.id}/settlements/complete`, { finalRemark: finalRemark.value || undefined });
+  await load();
+}
+
+async function submitRain() {
+  await api.post(`/rain-reschedules/screening/${s.value.id}`, {
+    weatherShot: rainForm.weatherShot || undefined,
+    equipmentArrived: rainForm.equipmentArrived || undefined,
+    audienceNotice: rainForm.audienceNotice || undefined,
+    merchantCoord: rainForm.merchantCoord || undefined,
+    rainDetail: rainForm.rainDetail || undefined,
+    newShowDate: rainForm.newShowDate,
+    newShowTime: rainForm.newShowTime || undefined,
+    coOrganizerFeePaid: rainForm.coOrganizerFeePaid,
+    coOrganizerFeeTotalCents: rainForm.coOrganizerFeePaid
+      ? Math.round(Number(rainForm.coOrganizerFeeTotalYuan || 0) * 100) : 0,
+  });
+  await load();
+}
+async function judgeRain(r: any) {
+  const d = rainDraft[r.id];
+  await api.post(`/rain-reschedules/${r.id}/judge`, {
+    copyrightReusable: d.copyrightReusable,
+    equipmentReusable: d.equipmentReusable,
+    securityReusable: d.securityReusable,
+    subsidyReusable: d.subsidyReusable,
+    copyrightJudgeNote: d.copyrightReusableNote || undefined,
+    equipmentJudgeNote: d.equipmentReusableNote || undefined,
+    securityJudgeNote: d.securityReusableNote || undefined,
+    subsidyJudgeNote: d.subsidyReusableNote || undefined,
+  });
+  await load();
+}
+async function feeRain(r: any) {
+  const d = rainDraft[r.id];
+  await api.post(`/rain-reschedules/${r.id}/fee`, {
+    coOrganizerFeePaid: true,
+    refundCents: Math.round(Number(d.refundYuan || 0) * 100),
+    buildCostCents: Math.round(Number(d.buildYuan || 0) * 100),
+    audienceCompCents: Math.round(Number(d.compYuan || 0) * 100),
+    audienceCompNotice: d.compNotice || undefined,
+  });
+  await load();
+}
+async function confirmRain(r: any) {
+  const d = rainDraft[r.id];
+  await api.post(`/rain-reschedules/${r.id}/confirm`, {
+    creditDelta: Number(d.creditDelta ?? -2),
+    creditImpactNote: d.creditNote || undefined,
+  });
+  await load();
+}
+async function rejectRain(r: any) {
+  const reason = window.prompt('请填写不予改期原因', '材料不充分或不具备改期条件');
+  if (reason === null) return;
+  await api.post(`/rain-reschedules/${r.id}/reject`, { reason });
   await load();
 }
 

@@ -12,6 +12,7 @@ import { Incident, IncidentReply } from './entities/incident.entity';
 import { TimelineEvent } from './entities/timeline-event.entity';
 import { VolunteerCheckin } from './entities/volunteer-checkin.entity';
 import { Settlement } from './entities/settlement.entity';
+import { RainReschedule } from './entities/rain-reschedule.entity';
 import { AuthModule } from './modules/auth/auth.module';
 import { VenuesModule } from './modules/venues/venues.module';
 import { OrganizersModule } from './modules/organizers/organizers.module';
@@ -22,12 +23,14 @@ import { IncidentsModule } from './modules/incidents/incidents.module';
 import { VolunteersModule } from './modules/volunteers/volunteers.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { RainRescheduleModule } from './modules/rain-reschedule/rain-reschedule.module';
 import { SeedService } from './seed/seed.service';
 import { HealthController } from './health.controller';
 
 const entities = [
   User, Venue, Organizer, Screening, Equipment, EquipmentAssignment,
   Inspection, Incident, IncidentReply, TimelineEvent, VolunteerCheckin, Settlement,
+  RainReschedule,
 ];
 
 @Module({
@@ -57,6 +60,7 @@ const entities = [
     VolunteersModule,
     SettlementsModule,
     DashboardModule,
+    RainRescheduleModule,
   ],
   providers: [SeedService],
   controllers: [HealthController],

@@ -51,14 +51,16 @@ export const STATUS_LABEL: Record<string, string> = {
   draft: '草稿', pending_review: '待文化审核', review_approved: '审核通过/待备设备',
   review_rejected: '已驳回', equipment_prepared: '设备已成套备好',
   equipment_checked_out: '设备已扫码出库', site_confirmed: '现场搭建确认',
-  screening: '放映中', completed: '已完成核销', cancelled: '已取消',
+  screening: '放映中', completed: '已完成核销',
+  postponed: '雨天改期·原场次停办', cancelled: '已取消',
 };
 
 export const STATUS_COLOR: Record<string, string> = {
   draft: '#9e9e9e', pending_review: '#e6a23c', review_approved: '#409eff',
   review_rejected: '#f56c6c', equipment_prepared: '#7b61ff',
   equipment_checked_out: '#13a8a8', site_confirmed: '#67c23a',
-  screening: '#e65100', completed: '#2e7d32', cancelled: '#9e9e9e',
+  screening: '#e65100', completed: '#2e7d32',
+  postponed: '#5b8def', cancelled: '#9e9e9e',
 };
 
 export const INCIDENT_TYPES: Record<string, string> = {

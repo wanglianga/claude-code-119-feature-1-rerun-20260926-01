@@ -38,6 +38,9 @@ export class SettlementsService {
     if (!TYPE_NAME[dto.type]) throw new BadRequestException('未知的核销类型');
     const screening = await this.screeningRepo.findOne({ where: { id: screeningId } });
     if (!screening) throw new NotFoundException('场次不存在');
+    if (screening.status === 'postponed') {
+      throw new BadRequestException('该场次已雨天改期（postponed），原场次不进入正常核销，协办费拆分/观众补偿请在「雨天改期」单处理');
+    }
 
     const entry = await this.repo.save(this.repo.create({
       screeningId,
@@ -74,6 +77,9 @@ export class SettlementsService {
   async copyrightWriteoff(screeningId: string, user: any, note?: string) {
     const screening = await this.screeningRepo.findOne({ where: { id: screeningId } });
     if (!screening) throw new NotFoundException('场次不存在');
+    if (screening.status === 'postponed') {
+      throw new BadRequestException('该场次已雨天改期，原场次不进行版权核销，版权沿用/重核在改期后新场次处理');
+    }
     if (screening.copyrightWrittenOff) throw new BadRequestException('该场次版权已核销');
     screening.copyrightWrittenOff = true;
     await this.screeningRepo.save(screening);
@@ -103,6 +109,7 @@ export class SettlementsService {
     });
     if (!s) throw new NotFoundException('场次不存在');
     if (s.status === 'completed') throw new BadRequestException('场次已关单');
+    if (s.status === 'postponed') throw new BadRequestException('该场次已雨天改期，原场次不进入正常核销关单，核销在改期后新场次完成');
 
     const pendingReturn = s.equipmentAssignments
       .filter((a) => !a.state.startsWith('returned') && a.state !== 'lost');

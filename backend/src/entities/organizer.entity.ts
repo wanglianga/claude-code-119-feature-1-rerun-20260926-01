@@ -38,6 +38,10 @@ export class Organizer {
   @Column({ type: 'int', default: 0 })
   violationCount: number;
 
+  /** 因强降雨改期的场次次数（改期结果影响该主办方后续申请评分） */
+  @Column({ type: 'int', default: 0 })
+  rescheduleCount: number;
+
   @Column({ type: 'text', nullable: true })
   remark: string;
 

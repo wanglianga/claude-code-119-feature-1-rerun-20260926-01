@@ -27,6 +27,7 @@ export class ScreeningsService {
     site_confirmed: '现场搭建确认',
     screening: '放映中',
     completed: '已完成核销',
+    postponed: '雨天改期·原场次停办',
     cancelled: '已取消',
   };
 
@@ -58,11 +59,16 @@ export class ScreeningsService {
         'applicant', 'venue', 'organizer',
         'equipmentAssignments', 'equipmentAssignments.equipment',
         'inspections', 'incidents', 'timeline',
-        'volunteerCheckins', 'settlements',
+        'volunteerCheckins', 'settlements', 'rainReschedules',
       ],
     });
     if (!s) throw new NotFoundException('场次不存在');
     (s as any).statusLabel = ScreeningsService.STATUS_FLOW[s.status];
+    // 雨天改期：原场次关联到改期后新场次
+    if (s.status === 'postponed' && s.rainReschedules?.length) {
+      const done = s.rainReschedules.find((r) => r.status === 'rescheduled' && r.newScreeningId);
+      if (done) (s as any).rescheduledToScreeningId = done.newScreeningId;
+    }
     // 风险等级：连续噪声/设备损坏点位影响下一轮审批
     const riskScore = s.venue.noiseCount * 2 + s.venue.damageCount * 3 + s.venue.complaintCount;
     (s as any).venueRiskLevel = riskScore >= 8 ? '高风险' : riskScore >= 3 ? '关注' : '正常';

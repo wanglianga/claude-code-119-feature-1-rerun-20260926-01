@@ -11,6 +11,7 @@ import { Incident } from './incident.entity';
 import { TimelineEvent } from './timeline-event.entity';
 import { VolunteerCheckin } from './volunteer-checkin.entity';
 import { Settlement } from './settlement.entity';
+import { RainReschedule } from './rain-reschedule.entity';
 
 /**
  * 场次生命周期：
@@ -22,6 +23,7 @@ import { Settlement } from './settlement.entity';
  *  -> site_confirmed（现场搭建/试播/噪声/隔离/消防通道上传确认）
  *  -> screening（放映中/已放映）
  *  -> completed（设备归还、核销完成）
+ * 现场搭建完成后遇强降雨改期 -> postponed（原场次不进入正常核销，由改期后新场次承接）
  * 申请延期等走 incidents 协同，不改主状态。
  */
 export type ScreeningStatus =
@@ -34,6 +36,7 @@ export type ScreeningStatus =
   | 'site_confirmed'
   | 'screening'
   | 'completed'
+  | 'postponed'
   | 'cancelled';
 
 @Entity('screenings')
@@ -157,6 +160,10 @@ export class Screening {
   @Column({ type: 'boolean', default: false })
   copyrightWrittenOff: boolean;
 
+  /** 雨天改期：若本场为改期后新场次，记录来源原场次 id */
+  @Column({ name: 'rescheduled_from_id', type: 'uuid', nullable: true })
+  rescheduledFromId: string;
+
   @Column({ type: 'text', nullable: true })
   finalRemark: string;
 
@@ -181,6 +188,14 @@ export class Screening {
 
   @OneToMany(() => Settlement, (s) => s.screening)
   settlements: Settlement[];
+
+  @OneToMany(() => RainReschedule, (r) => r.screening)
+  rainReschedules: RainReschedule[];
+
+  /** 改期来源原场次（仅改期后新场次有值） */
+  @ManyToOne(() => Screening, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'rescheduled_from_id' })
+  rescheduledFrom: Screening;
 
   @CreateDateColumn()
   createdAt: Date;

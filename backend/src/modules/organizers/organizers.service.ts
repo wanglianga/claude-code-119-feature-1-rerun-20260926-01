@@ -35,4 +35,19 @@ export class OrganizersService {
       await this.repo.save(o);
     }
   }
+
+  /**
+   * 雨天改期结果联动主办方后续申请评分：
+   * 累加改期次数，并按判定结论扣减信用分（不可抗力但占用资源/需协调）。
+   */
+  async applyRescheduleImpact(id: string, scoreDelta: number, remark: string) {
+    const o = await this.repo.findOne({ where: { id } });
+    if (!o) throw new NotFoundException('主办方不存在');
+    o.rescheduleCount += 1;
+    if (scoreDelta) {
+      o.creditScore = Math.max(0, Math.min(100, o.creditScore + scoreDelta));
+    }
+    if (remark) o.remark = remark;
+    return this.repo.save(o);
+  }
 }
