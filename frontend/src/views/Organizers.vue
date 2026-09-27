@@ -9,7 +9,7 @@
       <table class="list">
         <thead>
           <tr><th>主办方</th><th>类型</th><th>联系人</th><th>累计场次</th>
-            <th>违规次数</th><th>信用分</th><th>押金余额</th><th>备注</th>
+            <th>违规次数</th><th>降雨改期</th><th>信用分</th><th>押金余额</th><th>备注</th>
             <th v-if="canEdit">信用调整</th></tr>
         </thead>
         <tbody>
@@ -19,6 +19,7 @@
             <td>{{ o.contactName }}<br><span class="muted">{{ o.contactPhone }}</span></td>
             <td>{{ o.totalScreenings }}</td>
             <td :class="{ hot: o.violationCount >= 3 }">{{ o.violationCount }}</td>
+            <td :class="{ hot: (o.rainPostponementCount || 0) >= 2 }">{{ o.rainPostponementCount || 0 }}</td>
             <td>
               <div class="credit-bar"><div :style="{ width: o.creditScore + '%', background: creditColor(o.creditScore) }" /></div>
               <b>{{ o.creditScore }}</b>

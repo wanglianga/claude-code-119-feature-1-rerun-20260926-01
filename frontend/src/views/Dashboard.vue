@@ -7,6 +7,7 @@
       <div class="kpi"><div class="num">{{ data.kpi.pendingReview }}</div><div class="label">待审核</div></div>
       <div class="kpi"><div class="num">{{ data.kpi.inProgress }}</div><div class="label">备料/出库/放映中</div></div>
       <div class="kpi"><div class="num">{{ data.kpi.completed }}</div><div class="label">已核销关单</div></div>
+      <div class="kpi"><div class="num" style="color:#0277bd">{{ data.kpi.postponed || 0 }}</div><div class="label">强降雨改期</div></div>
       <div class="kpi"><div class="num" style="color:#d9534f">{{ data.kpi.openIncidents }}</div><div class="label">未办结异常</div></div>
       <div class="kpi"><div class="num" style="color:#d9534f">{{ data.kpi.blacklistedVenues }}</div><div class="label">黑名单场地</div></div>
     </div>
@@ -30,12 +31,13 @@
       <div class="card">
         <h3>主办方信用/押金</h3>
         <table class="list">
-          <thead><tr><th>主办方</th><th>类型</th><th>场次</th><th>违规</th><th>信用</th><th>押金(元)</th></tr></thead>
+          <thead><tr><th>主办方</th><th>类型</th><th>场次</th><th>违规</th><th>降雨改期</th><th>信用</th><th>押金(元)</th></tr></thead>
           <tbody>
             <tr v-for="o in data.organizers" :key="o.id">
               <td><b>{{ o.name }}</b></td><td>{{ o.organizerType }}</td>
               <td>{{ o.totalScreenings }}</td>
               <td :class="{ hot: o.violationCount >= 3 }">{{ o.violationCount }}</td>
+              <td :class="{ hot: (o.rainPostponementCount || 0) >= 2 }">{{ o.rainPostponementCount || 0 }}</td>
               <td><span class="tag" :class="o.creditScore >= 90 ? 'green' : o.creditScore >= 75 ? 'orange' : 'red'">{{ o.creditScore }}</span></td>
               <td>{{ (o.depositBalance / 100).toFixed(2) }}</td>
             </tr>

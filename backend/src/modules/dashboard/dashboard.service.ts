@@ -47,6 +47,7 @@ export class DashboardService {
       kpi: {
         totalScreenings: screenings.length,
         completed: byStatus['completed'] || 0,
+        postponed: byStatus['postponed'] || 0,
         pendingReview: byStatus['pending_review'] || 0,
         inProgress: screenings.filter((s) =>
           ['equipment_prepared', 'equipment_checked_out', 'site_confirmed', 'screening'].includes(s.status)).length,
@@ -58,6 +59,7 @@ export class DashboardService {
       organizers: organizers.map((o) => ({
         id: o.id, name: o.name, organizerType: o.organizerType,
         creditScore: o.creditScore, violationCount: o.violationCount,
+        rainPostponementCount: o.rainPostponementCount,
         totalScreenings: o.totalScreenings,
         depositBalance: Number(o.depositBalance),
       })),

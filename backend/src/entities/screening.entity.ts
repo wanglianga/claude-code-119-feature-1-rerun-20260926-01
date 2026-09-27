@@ -11,6 +11,7 @@ import { Incident } from './incident.entity';
 import { TimelineEvent } from './timeline-event.entity';
 import { VolunteerCheckin } from './volunteer-checkin.entity';
 import { Settlement } from './settlement.entity';
+import { RainPostponement } from './rain-postponement.entity';
 
 /**
  * 场次生命周期：
@@ -22,6 +23,7 @@ import { Settlement } from './settlement.entity';
  *  -> site_confirmed（现场搭建/试播/噪声/隔离/消防通道上传确认）
  *  -> screening（放映中/已放映）
  *  -> completed（设备归还、核销完成）
+ *  -> postponed（搭建完成后遇强降雨改期，原场次不进入正常核销；另克隆新场次）
  * 申请延期等走 incidents 协同，不改主状态。
  */
 export type ScreeningStatus =
@@ -34,6 +36,7 @@ export type ScreeningStatus =
   | 'site_confirmed'
   | 'screening'
   | 'completed'
+  | 'postponed'
   | 'cancelled';
 
 @Entity('screenings')
@@ -181,6 +184,14 @@ export class Screening {
 
   @OneToMany(() => Settlement, (s) => s.screening)
   settlements: Settlement[];
+
+  /** 强降雨改期处理（原场次通常一条；确认后指向新场次） */
+  @OneToMany(() => RainPostponement, (r) => r.screening)
+  rainPostponements: RainPostponement[];
+
+  /** 本场次由哪个原场次改期克隆而来（改期场次溯源） */
+  @Column({ name: 'rescheduled_from_id', type: 'uuid', nullable: true })
+  rescheduledFromId: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

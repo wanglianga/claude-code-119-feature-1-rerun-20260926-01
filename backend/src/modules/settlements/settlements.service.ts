@@ -15,6 +15,9 @@ const TYPE_NAME: Record<string, string> = {
   subsidy: '街道补贴发放',
   complaint_compensation: '投诉赔付',
   copyright_writeoff: '版权核销',
+  coorganizer_refund: '强降雨改期·协办费退还',
+  setup_cost: '强降雨改期·已发生搭建成本',
+  audience_compensation: '强降雨改期·观众补偿',
 };
 
 @Injectable()
@@ -33,11 +36,15 @@ export class SettlementsService {
     return this.repo.find({ where: { screeningId }, order: { createdAt: 'ASC' } });
   }
 
-  /** 财务登记一笔核销流水（赔付/押金/补贴/投诉赔付），版权核销单独走 writeoff */
+  /** 财务登记一笔核销流水（赔付/押金/补贴/投诉赔付），版权核销单独走 writeoff。
+   *  强降雨改期的原场次不进入正常核销，其可退费/搭建成本/观众补偿由改期流程单独记账。 */
   async addEntry(screeningId: string, user: any, dto: { type: string; amountCents: number; note?: string }) {
     if (!TYPE_NAME[dto.type]) throw new BadRequestException('未知的核销类型');
     const screening = await this.screeningRepo.findOne({ where: { id: screeningId } });
     if (!screening) throw new NotFoundException('场次不存在');
+    if (screening.status === 'postponed') {
+      throw new BadRequestException('该场次已强降雨改期，原场次不进入正常核销；退费/搭建成本/观众补偿请在「雨天改期」中处理');
+    }
 
     const entry = await this.repo.save(this.repo.create({
       screeningId,
@@ -70,10 +77,13 @@ export class SettlementsService {
     return entry;
   }
 
-  /** 版权核销（审核员/财务确认影片授权已按场次核销） */
+  /** 版权核销（审核员/财务确认影片授权已按场次核销）。改期原场次不做正常核销。 */
   async copyrightWriteoff(screeningId: string, user: any, note?: string) {
     const screening = await this.screeningRepo.findOne({ where: { id: screeningId } });
     if (!screening) throw new NotFoundException('场次不存在');
+    if (screening.status === 'postponed') {
+      throw new BadRequestException('该场次已强降雨改期，原场次不进入正常版权核销（版权在改期新场次沿用/重核）');
+    }
     if (screening.copyrightWrittenOff) throw new BadRequestException('该场次版权已核销');
     screening.copyrightWrittenOff = true;
     await this.screeningRepo.save(screening);
@@ -102,6 +112,9 @@ export class SettlementsService {
       relations: ['equipmentAssignments', 'venue'],
     });
     if (!s) throw new NotFoundException('场次不存在');
+    if (s.status === 'postponed') {
+      throw new BadRequestException('该场次已强降雨改期，原场次不核销关单（请在改期新场次完成后续流程）');
+    }
     if (s.status === 'completed') throw new BadRequestException('场次已关单');
 
     const pendingReturn = s.equipmentAssignments

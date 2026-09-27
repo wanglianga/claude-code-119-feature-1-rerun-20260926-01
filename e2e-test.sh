@@ -147,6 +147,102 @@ echo "$R" | grep -q '"riskyVenues"' && echo "$R" | grep -q '"recentTimeline"' &&
 echo "$R" | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["kpi"]["completed"]>=1 and d["kpi"]["blacklistedVenues"]>=1' \
   && ok "看板统计：已完成场次≥1、黑名单场地≥1" || bad "看板统计值"
 
+echo "== 14. 强降雨改期全链路（搭建完成后遇暴雨） =="
+# 14.1 新建第二场 → 审批 → 备料 → 扫码出库 → 五项现场 → 搭建确认
+BODY="{\"title\":\"商圈周末露天放映改期验证\",\"organizerId\":\"$ORG\",\"venueId\":\"$VENUE_OK\",\"showDate\":\"2026-10-18\",\"showTime\":\"19:30\",\"location\":\"广场南侧\",\"expectedAudience\":300,\"filmName\":\"流浪地球2\",\"copyrightProof\":\"ZS-E2E-RAIN\",\"copyrightOwner\":\"中影\",\"powerCondition\":\"配电箱220V/32A\",\"screenSize\":\"8m x 4.5m\",\"speakerCount\":4,\"securityStaff\":6,\"rainPlan\":\"防雨罩+撤场+改期补映\",\"siteManagerName\":\"周强\",\"securityLeadName\":\"孙队\"}"
+SID2=$(req POST "$TOK_applicant" /screenings -d "$BODY" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+req POST "$TOK_applicant" "/screenings/$SID2/submit" -d '{}' >/dev/null
+req POST "$TOK_reviewer" "/screenings/$SID2/review" -d '{"approved":true,"filingNo":"BA-RAIN-001","comment":"授权与备案通过"}' >/dev/null
+req POST "$TOK_warehouse" "/equipment/screening/$SID2/prepare" -d '{}' >/dev/null
+ASSIGN2=$(req GET "$TOK_warehouse" "/equipment/screening/$SID2/assignments")
+for CODE in $(echo "$ASSIGN2" | python3 -c 'import sys,json;[print(x["equipment"]["code"]) for x in json.load(sys.stdin)]'); do
+  req POST "$TOK_warehouse" "/equipment/screening/$SID2/scan" -d "{\"code\":\"$CODE\"}" >/dev/null
+done
+for CAT in build_setup test_play isolation firelane; do
+  req POST "$TOK_site" "/screenings/$SID2/inspections" -d "{\"category\":\"$CAT\",\"detail\":\"$CAT 已完成\"}" >/dev/null
+done
+req POST "$TOK_security" "/screenings/$SID2/inspections" -d '{"category":"noise","noiseDb":54,"detail":"达标"}' >/dev/null
+R=$(req POST "$TOK_site" "/screenings/$SID2/confirm-site" -d '{}')
+echo "$R" | grep -q 'site_confirmed' && ok "14.1 第二场搭建确认完成" || bad "14.1 搭建确认: $R"
+
+# 14.2 先发起「临时降雨」异常工单并办结（现场负责人主责）
+RINC=$(req POST "$TOK_security" "/incidents/screening/$SID2" -d '{"type":"rain","description":"19:20突降暴雨，气象台橙色预警，现场已加盖防雨罩暂停放映","severity":3}')
+RINC_ID=$(echo "$RINC" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+echo "$RINC" | grep -q '"ownerRole":"site_manager"' && ok "14.2 降雨工单自动分派现场负责人" || bad "14.2 降雨分派: $RINC"
+req POST "$TOK_site" "/incidents/$RINC_ID/resolve" -d '{"resolution":"暴雨持续，启动雨天预案，申请改期","confirmed":true}' >/dev/null
+
+# 14.3 材料不齐：仅传气象截图 -> 仍为 draft 并提示缺项
+R=$(req POST "$TOK_site" "/screenings/$SID2/postponement" -d '{"newShowDate":"2026-10-25","newShowTime":"19:30","weatherShotUrl":"rain_alert_20261018.png","weatherNote":"暴雨橙色预警19:00-23:00"}')
+echo "$R" | grep -q '"status":"draft"' && ok "14.3 仅传气象截图停留在待补材料" || bad "14.3 材料状态: $R"
+
+# 14.4 补齐四项材料 -> evaluating
+R=$(req POST "$TOK_site" "/screenings/$SID2/postponement" -d '{"equipmentOnSite":"投影/幕布/4只音箱/电缆盘已搭建到场，备用灯泡、防雨罩在场","audienceNotice":"现场广播+业主群公告：本场因暴雨改期10-25，凭原通知入场，受影响观众给予补偿","merchantCoord":"周边商户同意外摆顺延；已缴协办费5000元，协商退还3000元，2000元为已发生搭建成本"}')
+echo "$R" | grep -q '"status":"evaluating"' && ok "14.4 四项材料齐备进入四方评估" || bad "14.4 材料齐备: $R"
+
+# 14.5 越权评估被拒（仓库不能评估版权）
+R=$(req POST "$TOK_warehouse" "/screenings/$SID2/postponement/evaluate" -d '{"dimension":"copyright","reusable":true}')
+echo "$R" | grep -q '不由你所在角色' && ok "14.5 版权项仅审核员可评估（越权拦截）" || bad "14.5 越权评估: $R"
+
+# 14.6 四方评估：版权可沿用/设备随套沿用/安保顺延/补贴保留
+req POST "$TOK_reviewer" "/screenings/$SID2/postponement/evaluate" -d '{"dimension":"copyright","reusable":true,"note":"授权书覆盖至2026-12-31，备案有效，可沿用"}' >/dev/null
+req POST "$TOK_warehouse" "/screenings/$SID2/postponement/evaluate" -d '{"dimension":"equipment","reusable":true,"note":"成套设备继续占用，改期当天随套使用，无需撤场"}' >/dev/null
+req POST "$TOK_security" "/screenings/$SID2/postponement/evaluate" -d '{"dimension":"security","reusable":true,"note":"6名安保10-25可顺延排班"}' >/dev/null
+R=$(req POST "$TOK_finance" "/screenings/$SID2/postponement/evaluate" -d '{"dimension":"subsidy","reusable":true,"note":"公益场补贴资格保留至改期场次"}')
+echo "$R" | grep -q '"status":"fee_pending"' && ok "14.6 四方评估完成→待财务拆费" || bad "14.6 四方评估: $R"
+
+# 14.7 协办费拆分超额被拒
+R=$(req POST "$TOK_finance" "/screenings/$SID2/postponement/fee" -d '{"coOrganizerFeePaid":500000,"refundableAmount":400000,"setupCost":200000,"audienceCompensation":500}')
+echo "$R" | grep -q '不能超过' && ok "14.7 可退费+搭建成本超额时拦截" || bad "14.7 拆费校验: $R"
+
+# 14.8 正确拆分但观众补偿未通知 -> 确认改期被拒
+req POST "$TOK_finance" "/screenings/$SID2/postponement/fee" -d '{"coOrganizerFeePaid":500000,"refundableAmount":300000,"setupCost":200000,"audienceCompensation":500,"audienceCompNotified":false,"feeNote":"3000元退还，2000元搭建人工物料不退，5元/人观众补偿"}' >/dev/null
+R=$(req POST "$TOK_street" "/screenings/$SID2/postponement/confirm" -d '{"newShowDate":"2026-10-25","creditPenalty":3}')
+echo "$R" | grep -q '观众补偿尚未通知' && ok "14.8 观众补偿未触达时禁止确认改期" || bad "14.8 补偿通知校验: $R"
+
+# 14.9 标记补偿已触达 → 街道确认改期，克隆新场次
+req POST "$TOK_finance" "/screenings/$SID2/postponement/fee" -d '{"coOrganizerFeePaid":500000,"refundableAmount":300000,"setupCost":200000,"audienceCompensation":500,"audienceCompNotified":true,"feeNote":"补偿通知已群发触达"}' >/dev/null
+CREDIT_B2=$(req GET "$TOK_street" /organizers | python3 -c "import sys,json;print(next(o['creditScore'] for o in json.load(sys.stdin) if o['id']=='$ORG'))")
+RAIN_B2=$(req GET "$TOK_street" /organizers | python3 -c "import sys,json;print(next(o.get('rainPostponementCount',0) for o in json.load(sys.stdin) if o['id']=='$ORG'))")
+R=$(req POST "$TOK_street" "/screenings/$SID2/postponement/confirm" -d '{"newShowDate":"2026-10-25","newShowTime":"19:30","creditPenalty":3,"remark":"暴雨不可抗力改期"}')
+echo "$R" | grep -q 'newScreeningId' && ok "14.9 确认改期并生成新场次" || bad "14.9 确认改期: $R"
+NEW_SID=$(echo "$R" | python3 -c 'import sys,json;print(json.load(sys.stdin)["newScreeningId"])')
+
+# 14.10 原场次状态=postponed，版权沿用/设备随套迁移，信用-3、改期次数+1
+S2=$(req GET "$TOK_street" "/screenings/$SID2")
+echo "$S2" | grep -q '"status":"postponed"' && ok "14.10 原场次置为已改期（不核销）" || bad "14.10 原场次状态: $(echo "$S2" | python3 -c 'import sys,json;print(json.load(sys.stdin)["status"])')"
+NEW=$(req GET "$TOK_street" "/screenings/$NEW_SID")
+echo "$NEW" | python3 -c "import sys,json;s=json.load(sys.stdin);assert s['rescheduledFromId']=='$SID2' and s['status']=='equipment_checked_out' and s['copyrightConfirmed'] and len(s['equipmentAssignments'])==6, s['status']" \
+  && ok "14.10 新场次溯源原场次、版权沿用、成套6件随套迁移、直接已出库" \
+  || bad "14.10 新场次迁移: $(echo "$NEW" | python3 -c 'import sys,json;s=json.load(sys.stdin);print(s["status"],s["rescheduledFromId"],len(s["equipmentAssignments"]))')"
+CREDIT_A2=$(req GET "$TOK_street" /organizers | python3 -c "import sys,json;print(next(o['creditScore'] for o in json.load(sys.stdin) if o['id']=='$ORG'))")
+RAIN_A2=$(req GET "$TOK_street" /organizers | python3 -c "import sys,json;print(next(o.get('rainPostponementCount',0) for o in json.load(sys.stdin) if o['id']=='$ORG'))")
+[ "$CREDIT_A2" = $((CREDIT_B2-3)) ] && ok "14.10 主办方信用 $CREDIT_B2→$CREDIT_A2 (-3)" || bad "14.10 信用 $CREDIT_B2→$CREDIT_A2"
+[ "$RAIN_A2" = $((RAIN_B2+1)) ] && ok "14.10 降雨改期次数 $RAIN_B2→$RAIN_A2" || bad "14.10 改期次数 $RAIN_B2→$RAIN_A2"
+
+# 14.11 原场次不进入正常核销：版权核销/关单/普通流水均被拒
+R=$(req POST "$TOK_reviewer" "/screenings/$SID2/settlements/copyright-writeoff" -d '{}')
+echo "$R" | grep -q '不进入正常版权核销' && ok "14.11 改期原场次版权核销被拒" || bad "14.11 版权核销拦截: $R"
+R=$(req POST "$TOK_finance" "/screenings/$SID2/settlements/complete" -d '{}')
+echo "$R" | grep -q '不核销关单' && ok "14.11 改期原场次关单被拒" || bad "14.11 关单拦截: $R"
+R=$(req POST "$TOK_finance" "/screenings/$SID2/settlements" -d '{"type":"subsidy","amountCents":100}')
+echo "$R" | grep -q '不进入正常核销' && ok "14.11 改期原场次普通核销流水被拒" || bad "14.11 普通流水拦截: $R"
+
+# 14.12 协办费三段拆分已记账到原场次
+echo "$S2" | python3 -c '
+import sys,json
+s=json.load(sys.stdin)
+m={r["type"]:int(r["amountCents"]) for r in s["settlements"]}
+assert m.get("coorganizer_refund")==300000 and m.get("setup_cost")==200000 and m.get("audience_compensation")==500, m
+' && ok "14.12 原场次记账：可退3000/搭建成本2000/观众补偿5元" || bad "14.12 改期费用记账: $(echo "$S2" | python3 -c 'import sys,json;print({r["type"]:r["amountCents"] for r in json.load(sys.stdin)["settlements"]})')"
+
+# 14.13 改期全过程写入活动时间线（kind=rain）
+TL2=$(req GET "$TOK_street" "/screenings/$SID2" | python3 -c '
+import sys,json
+s=json.load(sys.stdin)
+titles=[t["title"] for t in s["timeline"] if t["kind"]=="rain"]
+print("OK" if any("改期确认" in t for t in titles) and any("材料" in t for t in titles) else "MISS")')
+[ "$TL2" = "OK" ] && ok "14.13 时间线记录改期材料/评估/确认节点" || bad "14.13 改期时间线: $TL2"
+
 echo
 echo "RESULT: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = "0" ]

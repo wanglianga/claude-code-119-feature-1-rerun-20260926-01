@@ -27,6 +27,7 @@ export class ScreeningsService {
     site_confirmed: '现场搭建确认',
     screening: '放映中',
     completed: '已完成核销',
+    postponed: '已强降雨改期',
     cancelled: '已取消',
   };
 
@@ -58,7 +59,7 @@ export class ScreeningsService {
         'applicant', 'venue', 'organizer',
         'equipmentAssignments', 'equipmentAssignments.equipment',
         'inspections', 'incidents', 'timeline',
-        'volunteerCheckins', 'settlements',
+        'volunteerCheckins', 'settlements', 'rainPostponements',
       ],
     });
     if (!s) throw new NotFoundException('场次不存在');

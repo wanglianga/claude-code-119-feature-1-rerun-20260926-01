@@ -14,6 +14,9 @@
     <div v-if="s.venue?.blacklisted" class="notice danger">
       ⛔ 该场地已列入黑名单：{{ s.venue.blacklistReason }}
     </div>
+    <div v-if="s.status === 'postponed'" class="notice" style="background:#e1f4fe;border-color:#0277bd">
+      🌧️ 本场次已因强降雨改期，原场次不进入正常核销，请见「雨天改期」页签。
+    </div>
     <div v-else-if="s.venueRiskLevel !== '正常'" class="notice">
       ⚠ 点位风险等级：<b>{{ s.venueRiskLevel }}</b>
       （历史噪声 {{ s.venue.noiseCount }} 次 / 设备损坏 {{ s.venue.damageCount }} 次 / 投诉 {{ s.venue.complaintCount }} 次，
@@ -254,6 +257,26 @@
 
     <!-- 核销 -->
     <div v-show="tab === 'settlement'">
+      <div v-if="s.status === 'postponed'" class="card">
+        <h3>该场次已强降雨改期 · 不进入正常核销</h3>
+        <div class="notice" style="background:#e1f4fe;border-color:#0277bd">
+          原场次的协办费可退部分、已发生搭建成本、观众补偿已在「雨天改期」流程记账，
+          不做版权核销与关单；请在改期生成的新场次完成备料/放映/核销。
+        </div>
+        <table class="list" style="margin-top:12px">
+          <thead><tr><th>改期记账类型</th><th>金额</th><th>备注</th><th>时间</th></tr></thead>
+          <tbody>
+            <tr v-for="r in rainSettlements" :key="r.id">
+              <td>{{ SETTLEMENT_TYPES[r.type] || r.type }}</td>
+              <td>¥{{ fen(r.amountCents) }}</td>
+              <td class="muted">{{ r.note }}</td>
+              <td class="muted">{{ fmt(r.createdAt) }}</td>
+            </tr>
+            <tr v-if="!rainSettlements.length"><td colspan="4" class="muted" style="text-align:center">暂无改期费用记录</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <template v-else>
       <div class="card">
         <h3>活动结束 · 归还/赔付/投诉/版权/补贴（均回到本场次记录）</h3>
         <div class="grid4">
@@ -295,12 +318,18 @@
           <button class="success" @click="complete">✓ 关单归档（设备已还+版权已核销）</button>
         </div>
       </div>
+      </template>
+    </div>
+
+    <!-- 雨天改期 -->
+    <div v-show="tab === 'rain'">
+      <RainPostponement :screening="s" @changed="load" />
     </div>
 
     <!-- 时间线 -->
     <div v-show="tab === 'timeline'">
       <div class="card">
-        <h3>活动时间线（申请 → 审批 → 出库 → 搭建 → 放映 → 投诉 → 核销）</h3>
+        <h3>活动时间线（申请 → 审批 → 出库 → 搭建 → 放映 → 投诉 → 改期/核销）</h3>
         <div class="timeline">
           <div v-for="t in sortedTimeline" :key="t.id" class="item">
             <div class="t">{{ t.title }} <span class="pill">{{ ROLE_NAME[t.actorRole] || t.actorRole }} · {{ t.actorName }}</span></div>
@@ -322,6 +351,7 @@ import {
   INCIDENT_TYPES, INSPECTION_CATEGORIES, EQUIPMENT_TYPES, SETTLEMENT_TYPES, fenToYuan,
 } from '../api';
 import Info from '../components/Info.vue';
+import RainPostponement from '../components/RainPostponement.vue';
 
 const route = useRoute();
 const s = ref<any>(null);
@@ -335,6 +365,7 @@ const tabs = computed(() => [
   { key: 'equipment', label: `设备出库/归还${s.value?.equipmentAssignments?.length ? `（${s.value.equipmentAssignments.length}）` : ''}` },
   { key: 'site', label: '现场巡检/志愿者' },
   { key: 'incidents', label: `异常协同${s.value?.incidents?.length ? `（${s.value.incidents.filter((i:any)=>i.status!=='resolved').length}）` : ''}` },
+  { key: 'rain', label: '雨天改期' },
   { key: 'settlement', label: '归还核销/补贴' },
   { key: 'timeline', label: '街道时间线' },
 ]);
@@ -360,6 +391,10 @@ const remainCount = computed(() => (s.value?.equipmentAssignments?.length || 0) 
 const canReturn = computed(() =>
   isAny('warehouse', 'site_manager', 'street') &&
   ['equipment_checked_out', 'site_confirmed', 'screening'].includes(s.value?.status));
+
+const RAIN_FEE_TYPES = ['coorganizer_refund', 'setup_cost', 'audience_compensation'];
+const rainSettlements = computed(() =>
+  (s.value?.settlements || []).filter((r: any) => RAIN_FEE_TYPES.includes(r.type)));
 
 function stateLabel(st: string) {
   return ({ prepared: '已备料待领', checked_out: '已扫码出库', returned_ok: '完好归还', returned_damaged: '损坏归还', lost: '遗失' } as any)[st] || st;

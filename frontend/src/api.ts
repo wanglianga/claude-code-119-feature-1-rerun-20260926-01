@@ -51,14 +51,14 @@ export const STATUS_LABEL: Record<string, string> = {
   draft: '草稿', pending_review: '待文化审核', review_approved: '审核通过/待备设备',
   review_rejected: '已驳回', equipment_prepared: '设备已成套备好',
   equipment_checked_out: '设备已扫码出库', site_confirmed: '现场搭建确认',
-  screening: '放映中', completed: '已完成核销', cancelled: '已取消',
+  screening: '放映中', completed: '已完成核销', postponed: '已强降雨改期', cancelled: '已取消',
 };
 
 export const STATUS_COLOR: Record<string, string> = {
   draft: '#9e9e9e', pending_review: '#e6a23c', review_approved: '#409eff',
   review_rejected: '#f56c6c', equipment_prepared: '#7b61ff',
   equipment_checked_out: '#13a8a8', site_confirmed: '#67c23a',
-  screening: '#e65100', completed: '#2e7d32', cancelled: '#9e9e9e',
+  screening: '#e65100', completed: '#2e7d32', postponed: '#0277bd', cancelled: '#9e9e9e',
 };
 
 export const INCIDENT_TYPES: Record<string, string> = {
@@ -81,7 +81,20 @@ export const SETTLEMENT_TYPES: Record<string, string> = {
   damage_compensation: '设备损坏赔付', deposit_deduct: '押金扣减',
   deposit_refund: '押金退还', subsidy: '街道补贴发放',
   complaint_compensation: '投诉赔付', copyright_writeoff: '版权核销',
+  coorganizer_refund: '改期·协办费退还', setup_cost: '改期·搭建成本',
+  audience_compensation: '改期·观众补偿',
 };
+
+export const POSTPONE_STATUS_LABEL: Record<string, string> = {
+  draft: '待补材料', evaluating: '四方评估中', fee_pending: '待财务拆费/确认', confirmed: '已确认改期',
+};
+
+export const RAIN_DIMENSIONS: Array<{ key: string; label: string; role: string; roleLabel: string }> = [
+  { key: 'copyright', label: '版权授权日期沿用', role: 'reviewer', roleLabel: '文化审核员' },
+  { key: 'equipment', label: '设备占用沿用', role: 'warehouse', roleLabel: '仓库' },
+  { key: 'security', label: '安保排班顺延', role: 'security', roleLabel: '安保' },
+  { key: 'subsidy', label: '补贴资格保留', role: 'finance', roleLabel: '财务' },
+];
 
 export function fenToYuan(cents: number | string) {
   return (Number(cents || 0) / 100).toFixed(2);
